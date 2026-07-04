@@ -1,7 +1,8 @@
-from django.test import SimpleTestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 from types import SimpleNamespace
+from unittest.mock import patch
 import numpy as np
 
 from qmpy.utils import Lark2Django
@@ -71,6 +72,10 @@ class RESTfulTestCase(SimpleTestCase):
         assert truth_value == self.transform_q(
             "_oqmd_stability<=-0.2 OR _oqmd_stability>1."
         )
+        truth_value = "(AND: ('stability__gt', '0'))"
+        assert truth_value == self.transform_q("stability>0")
+        truth_value = "(AND: ('calculation__band_gap__gt', '2'))"
+        assert truth_value == self.transform_q("band_gap>2")
         truth_value = "(OR: ('entry__composition__ntypes', '3'), ('entry__composition__ntypes', '5'))"
         assert truth_value == self.transform_q("elements LENGTH 3 OR nelements=5")
 
@@ -191,8 +196,31 @@ class RESTfulTestCase(SimpleTestCase):
         assert self.transform_q("nsites<8 AND nelements<4", 1) == []
 
 
+class SearchViewTestCase(TestCase):
+    @override_settings(ALLOWED_HOSTS=["testserver"])
+    @patch("qmpy.rester.qmpy_rester.QMPYRester")
+    def test_search_form_passes_legacy_stability_filter(self, mock_rester_cls):
+        mock_rester = mock_rester_cls.return_value.__enter__.return_value
+        mock_rester.get_oqmd_phases.return_value = {
+            "data": [],
+            "meta": {"data_available": 0},
+        }
+
+        client = Client(enforce_csrf_checks=False)
+        response = client.post(
+            "/api/search",
+            {"search": "Search", "stability": "0"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_rester.get_oqmd_phases.assert_called_once()
+        kwargs = mock_rester.get_oqmd_phases.call_args.kwargs
+        self.assertEqual(kwargs["stability"], "0")
+        self.assertIn("fields", kwargs)
+
+
 @override_settings(ALLOWED_HOSTS=["testserver"])
-class OptimadeEndpointTestCase(SimpleTestCase):
+class OptimadeEndpointTestCase(TestCase):
     def test_info_advertises_v1_2(self):
         response = self.client.get("/optimade/info")
         self.assertEqual(response.status_code, 200)
@@ -232,10 +260,10 @@ class OptimadeEndpointTestCase(SimpleTestCase):
         self.assertEqual(response.status_code, 501)
         self.assertIn("errors", response.json())
 
-    def test_legacy_unprefixed_oqmd_filter_is_rejected(self):
+    def test_legacy_unprefixed_oqmd_filter_is_supported(self):
         response = self.client.get("/optimade/v1/structures?filter=stability=0")
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Unknown property", response.json()["errors"][0]["detail"])
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("data", response.json())
 
     def test_structures_info_uses_v1_2_property_metadata(self):
         response = self.client.get("/optimade/info/structures")

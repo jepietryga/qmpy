@@ -161,30 +161,30 @@ class Lark2Django(Transformer):
         with open(property_file) as handle:
             prop_data = json.load(handle)
         self.property_dict = {}
-        for item in prop_data:
-            self.property_dict[item] = RESTProperty(**prop_data[item])
-        standard_properties = {
-            "chemical_formula_descriptive",
-            "chemical_formula_reduced",
-            "chemical_formula_anonymous",
-            "elements",
-            "id",
-            "last_modified",
-            "nelements",
-            "nperiodic_dimensions",
-            "nsites",
-            "space_group_it_number",
-            "space_group_symbol_hall",
-            "space_group_symbol_hermann_mauguin",
-            "species_at_sites",
-            "structure_features",
-            "type",
-        }
-        self.property_dict = {
-            name: prop
-            for name, prop in self.property_dict.items()
-            if name in standard_properties or name.startswith("_oqmd_")
-        }
+        for name, data in prop_data.items():
+            prop = RESTProperty(**data)
+            if (
+                name.startswith("_oqmd_")
+                or name in {
+                    "chemical_formula_descriptive",
+                    "chemical_formula_reduced",
+                    "chemical_formula_anonymous",
+                    "elements",
+                    "id",
+                    "last_modified",
+                    "nelements",
+                    "nperiodic_dimensions",
+                    "nsites",
+                    "space_group_it_number",
+                    "space_group_symbol_hall",
+                    "space_group_symbol_hermann_mauguin",
+                    "species_at_sites",
+                    "structure_features",
+                    "type",
+                }
+                or prop.is_queryable
+            ):
+                self.property_dict[name] = prop
         self.property_dict.update(
             {
                 "species_at_sites": RESTProperty(
