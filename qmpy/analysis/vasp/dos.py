@@ -80,12 +80,13 @@ class DOS(models.Model):
         """Set the Fermi level."""
         ef = efermi - self._efermi
         self._efermi = efermi
-        if isinstance(self.data, np.ndarray):
-            try:
-                self.data[0, :] = self.data[0, :] + ef
-                self._site_dos[:, 0, :] = self._site_dos[:, 0, :] + ef
-            except IndexError:
-                pass
+        try:
+            self.data[0, :] = self.data[0, :] + ef
+            self._site_dos[:, 0, :] = self._site_dos[:, 0, :] + ef
+        except IndexError:
+            pass
+        except TypeError:
+            pass
 
     @property
     def energy(self):
